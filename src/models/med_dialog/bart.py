@@ -191,7 +191,8 @@ class MyBart(BaseTransformer):
             )
         else:
             generated_ids = self.model.generate(
-                    input_ids=None,
+                    batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
                     use_cache=True,
                     decoder_start_token_id=self.decoder_start_token_id,
                     max_length=self.hparams.max_target_length,
