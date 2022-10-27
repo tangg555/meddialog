@@ -48,7 +48,14 @@ So if you want to run this code, you must have following preliminaries:
 ```shell
 python -r requirements.txt
 ```
-#### 2. Fine-tuning BART on Our datasets
+#### 2. Preprocess data
+Before finetuning, you need to preprocess dataset. You can run
+```shell
+python tasks/med-dialog/preprocess_for_corpus.py
+python tasks/med-dialog/enhance_dataset.py
+```
+
+#### 3. Fine-tuning BART on Our datasets
 I have set all essential parameters, so you can directly run 
 
 `python ./tasks/med-dialog/train.py`
