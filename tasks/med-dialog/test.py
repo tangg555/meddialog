@@ -20,10 +20,10 @@ sys.path.insert(0, str(BASE_DIR))  # run code in any path
 from src.configuration.med_dialog.config_args import parse_args_for_config
 from src.utils.file_utils import copy_file_or_dir, output_obj_to_file, pickle_save, pickle_load
 from src.utils import nlg_eval_utils
-from train import EventTriggerTrainer
+from train import MedDialogTrainer
 
 
-class EventTriggerTester(EventTriggerTrainer):
+class MedDialogTester(MedDialogTrainer):
     def __init__(self, args):
         # parameters
         super().__init__(args)
@@ -50,6 +50,7 @@ class EventTriggerTester(EventTriggerTrainer):
 
     def test(self, ckpt_path=None):
         if ckpt_path is None:
+            print(self.checkpoints)
             ckpt_path = self.checkpoints[-1]
         self.pl_trainer.test(model=self.model, ckpt_path=ckpt_path)
 
@@ -75,11 +76,16 @@ class EventTriggerTester(EventTriggerTrainer):
         print(f"test_loss: {self.test_output['test_loss']}")
         print(f"metrics: {self.test_output['log']}")
 
-        copy_file_or_dir(self.src_file, self.generation_dir / "test.source.txt")
-        copy_file_or_dir(self.tgt_file, self.generation_dir / "test.target.txt")
+        #copy_file_or_dir(self.src_file, self.generation_dir / "test.source.txt")
+        #copy_file_or_dir(self.tgt_file, self.generation_dir / "test.target.txt")
 
         with open(self.gen_file, "w", encoding="utf-8") as fw_out:
             fw_out.write("\n".join(self.test_output["preds"]))
+        with open(self.generation_dir / "test.source.txt", "w", encoding="utf-8") as fw_out:
+            fw_out.write("\n".join(self.test_output["src"]))
+        with open(self.generation_dir / "test.target.txt", "w", encoding="utf-8") as fw_out:
+            fw_out.write("\n".join(self.test_output["tgts"]))
+
 
     def eval_output(self):
         self.init_test_output()
@@ -107,7 +113,7 @@ class EventTriggerTester(EventTriggerTrainer):
 
 if __name__ == '__main__':
     hparams = parse_args_for_config()
-    tester = EventTriggerTester(hparams)
+    tester = MedDialogTester(hparams)
 
     # generate predicted stories
     tester.generate()

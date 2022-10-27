@@ -26,12 +26,13 @@ from src.configuration.pl_argsparser import (
 )
 
 EXPERIMENT_GROUP = "med-dialog"
-MODEL_NAME = "bart"
+MODEL_NAME = "terms_bart"
 OUTPUT_DIR = f'{BASE_DIR}/output/{EXPERIMENT_GROUP}'
 DATASETS_DIR = f'{BASE_DIR}/datasets/{EXPERIMENT_GROUP}'
 RESOURCES_DIR = f'{BASE_DIR}/resources'
-DATA_NAME = "english-dialog"
-MODEL_NAME_OR_PATH = f'{RESOURCES_DIR}/external_models/bart-base'
+# DATA_NAME = "large-english-dialog-corpus"
+DATA_NAME = "dialog-with-term"
+MODEL_NAME_OR_PATH = f'facebook/bart-base'
 
 def add_customized_args(parser: argparse.ArgumentParser = None):
     if parser is None:
@@ -46,7 +47,7 @@ def add_customized_args(parser: argparse.ArgumentParser = None):
     )
     parser.add_argument(
         "--max_target_length",
-        default=1000,
+        default=400,
         type=int,
         help="The maximum total input sequence length after tokenization. Sequences longer "
              "than this will be truncated, sequences shorter will be padded.",
@@ -113,7 +114,7 @@ def add_args_for_pytorch_lightning(parser: argparse.ArgumentParser = None):
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-    parser.add_argument("--num_workers", default=4, type=int, help="kwarg passed to DataLoader")
+    parser.add_argument("--num_workers", default=16, type=int, help="kwarg passed to DataLoader")
     parser.add_argument("--optimizer_class", type=str, default="AdamW", help="optimizers: Adafactor|AdamW")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
@@ -140,8 +141,8 @@ def add_args_for_pytorch_lightning(parser: argparse.ArgumentParser = None):
     parser.add_argument("--n_val", type=int, default=1000, required=False, help="# examples. -1 means use all.")
     parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
     parser.add_argument("--overwrite_output_dir", action="store_true", default=True, help="overwrite_output_dir")
-    parser.add_argument("--train_batch_size", default=10, type=int, help="train_batch_size.")
-    parser.add_argument("--eval_batch_size", default=10, type=int, help="eval_batch_size.")
+    parser.add_argument("--train_batch_size", default=2, type=int, help="train_batch_size.")
+    parser.add_argument("--eval_batch_size", default=2, type=int, help="eval_batch_size.")
     # ############################### checkpoint settings ####################################
     parser.add_argument("--save_top_k", default=1, type=int,
                         help="The best k models according to the quantity monitored will be saved.")
@@ -160,7 +161,7 @@ def parse_args_for_config(parser: argparse.ArgumentParser = None):
     parser = pl.Trainer.add_argparse_args(parser)  # Extends existing argparse by default attributes for cls.
     # set defaults for args of pl.trainer
     parser = set_basic_args_for_pl_trainer(parser, output_dir=OUTPUT_DIR)
-    parser = set_speedup_args_for_pl_trainer(parser, amp_backend="native", precision=16)
+    parser = set_speedup_args_for_pl_trainer(parser, amp_backend="native", precision=32)
     parser = set_device_args_for_pl_trainer(parser)
 
     # customized

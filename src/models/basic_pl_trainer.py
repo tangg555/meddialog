@@ -71,7 +71,6 @@ class BasicPLTrainer(BasicTrainer):
     @property
     def checkpoints(self):
         ckpts = list(sorted(glob.glob(os.path.join(self.save_dir, "*.ckpt"), recursive=True)))
-        print(f"the checkpoint list: {ckpts}")
         return ckpts
 
     def auto_find_lr_rate(self):

@@ -41,19 +41,19 @@ import torch
 from torch.utils.data import DataLoader
 
 from transformers.models.bart import modeling_bart
-from transformers.models.bart.modeling_bart import BartForConditionalGeneration, BartConfig
+from transformers.models.bart.modeling_bart import BartConfig,BartForConditionalGeneration
 from transformers import BartTokenizer
 
 from src.utils.gen_utils import ids_to_clean_string, top_p_logits
 from src.utils import nlg_eval_utils
 from src.modules.med_dialog.datasets import (
-    EnglishDialogDataset,
+    EnglishDialogDataset, EnglishDialogDatasetWithTerms
 )
 from src.utils.med_dialog import model_utils
 from src.models.lightning_base import BaseTransformer
+from src.modules.med_dialog.bart_modules import BartWithTermsForCG
 
 logger = logging.getLogger(__name__)
-
 
 class MyBart(BaseTransformer):
     def __init__(self, hparams, **kwargs):
@@ -89,6 +89,7 @@ class MyBart(BaseTransformer):
         self.remain_sp_tokens = self.hparams.remain_sp_tokens
         if self.remain_sp_tokens:
             print("remain special tokens in target and pred text (e.g. [EVENT_s])")
+        self.outfile=0
 
 
     def _custom_init(self):
@@ -126,11 +127,17 @@ class MyBart(BaseTransformer):
 
         lm_logits = outputs["logits"]
 
-        assert lm_logits.shape[-1] == self.vocab_size
-        # lm_ligits: [batch, seq, vocab] tgt_ids: [batch, seq]
-        self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id, reduction="none")
-        losses_ = self.loss_fn(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
-        loss = torch.mean(losses_)
+        if self.hparams.label_smoothing == 0:
+            assert lm_logits.shape[-1] == self.vocab_size
+            # lm_ligits: [batch, seq, vocab] tgt_ids: [batch, seq]
+            self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id, reduction="none")
+            losses_ = self.loss_fn(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
+            loss = torch.mean(losses_)
+        else:
+            lprobs = torch.log_softmax(lm_logits, dim=-1)
+            loss, nll_loss = model_utils.label_smoothed_nll_loss(
+                lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=self.pad_token_id
+            )
         return loss
 
     @property
@@ -144,32 +151,6 @@ class MyBart(BaseTransformer):
         self.log_dict(self.current_val_metrics)
         logs["batch_size"] = batch["input_ids"].shape[0]
         return {"loss": loss, "log": logs}
-
-    @torch.no_grad()
-    def sample_sequence(self, batch, use_top_p=False, top_p=0.9):
-        batch_size = len(batch["ids"])
-        decoder_input_ids = torch.tensor([self.tokenizer.eos_token_id for _
-                                          in range(batch_size)])[:, None].to(self.device)
-        for _ in range(self.hparams.max_target_length):
-            outputs = self(input_ids=batch["input_ids"],
-                           attention_mask=batch["attention_mask"],
-                           decoder_input_ids=decoder_input_ids,
-                           use_cache=False, return_dict=True)
-            logits = outputs["logits"]
-            logits = logits[:, -1, :]
-            if use_top_p:
-                logits = top_p_logits(logits, p=top_p, device=self.device)
-                probs = torch.softmax(logits, dim=-1)
-                pred = torch.multinomial(probs, 1)
-            else:
-                probs = torch.softmax(logits, dim=-1)
-                pred = torch.topk(input=probs, k=1).indices
-            decoder_input_ids = torch.cat([decoder_input_ids, pred], 1)
-            # early stop
-            if pred[:, 0].eq(self.tokenizer.eos_token_id).sum() == pred.shape[0]:
-                break
-        generated_ids = decoder_input_ids
-        return generated_ids
 
     def gen_ids_to_clean_text(self, generated_ids: List[int]):
         gen_list = []
@@ -199,10 +180,27 @@ class MyBart(BaseTransformer):
                     num_beams=self.eval_beams,
                     top_p=self.top_p if self.use_top_p else None,
                 )
+        if self.outfile == 0:
+            outputs = self(batch['input_ids'], attention_mask=batch["attention_mask"], labels=batch['labels'],
+                           use_cache=False,
+                           output_attentions=True, output_hidden_states=True)
+            # for classification
+            cross_attentions = outputs["cross_attentions"]
+            cross_attentions = cross_attentions[0]
+            cross_attentions = torch.sum(cross_attentions,dim=1)
+            for j, emb in enumerate(batch['input_ids']):
+                for i in range(len(emb)):
+                    if emb[i] == self.tokenizer.convert_tokens_to_ids('[TERM]'):
+                        print(j, i)
+            cross_attentions = cross_attentions.cpu().numpy()
+            np.save('attention_vanilla.npy', cross_attentions)
+            self.outfile += 1
+
         tok = datetime.now()
         batch_gen_time = tok - tik
         preds: List[str] = self.gen_ids_to_clean_text(generated_ids)
         targets: List[str] = self.gen_ids_to_clean_text(batch["labels"])
+        source: List[str] = self.gen_ids_to_clean_text(batch["input_ids"])
         loss = self._step(batch)
 
         base_metrics = {"loss": loss.item()}
@@ -217,7 +215,7 @@ class MyBart(BaseTransformer):
         self.update_metric_names(base_metrics, update_flag=self.metric_names_update_flag)
         self.metric_names_update_flag = False
         base_metrics.update(batch_gen_time=batch_gen_time, gen_len=summ_len,
-                            preds=preds, targets=targets)
+                            preds=preds, targets=targets,source=source)
         return base_metrics
 
     def validation_step(self, batch, batch_idx) -> Dict:
@@ -238,11 +236,13 @@ class MyBart(BaseTransformer):
         print(f"Evaluation result: {val_metrics}")
         preds = model_utils.flatten_list([x["preds"] for x in outputs])
         tgts = model_utils.flatten_list([x["targets"] for x in outputs])
+        src = model_utils.flatten_list([x["source"] for x in outputs])
         self.log_dict(self.current_val_metrics)
         return {
             "log": val_metrics,
             "preds": preds,
             "tgts": tgts,
+            "src":src,
             f"{prefix}_loss": generative_metrics["loss"],
             f"{prefix}_{self.val_metric}": metric_val,
         }
@@ -294,4 +294,120 @@ class MyBart(BaseTransformer):
     def test_dataloader(self) -> DataLoader:
         return self.get_dataloader("test", "test", batch_size=self.hparams.eval_batch_size,
                                    shuffle=False)
+
+class MyBartWithTermClassification(MyBart):
+    def __init__(self, hparams, **kwargs):
+        super().__init__(hparams,
+                         **kwargs)
+
+    def _custom_init(self):
+        # load pretrained settings from bart
+        # config
+        self.config: BartConfig = BartConfig.from_pretrained(self.hparams.model_name_or_path)
+        # tokenizer
+        self.tokenizer: BartTokenizer = BartTokenizer.from_pretrained(self.hparams.model_name_or_path)
+        # model
+        self.model: BartWithTermsForCG = self._load_model(self.hparams.model_name_or_path, BartWithTermsForCG, self.config)
+
+        self._set_up(config=self.config,
+                     tokenizer=self.tokenizer,
+                     model=self.model)
+        self.dataset_class = EnglishDialogDatasetWithTerms
+        self.loss_names_update_flag = True
+        self.outfile=0
+
+    def _step(self, batch: dict):
+        src_ids, src_mask = batch["input_ids"], batch["attention_mask"]
+        tgt_ids = batch["labels"]
+        token_labels = batch["token_labels"]
+
+        # for generation
+        outputs = self(src_ids, attention_mask=src_mask, labels=tgt_ids, use_cache=False,
+                       output_attentions=True, output_hidden_states=True)
+        lm_loss = outputs["loss"]
+
+        # for classification
+        encoder_last_hidden_state = outputs["encoder_last_hidden_state"]    # [batch, seq, vocab]
+        token_logits = self.model.encoder_fc(encoder_last_hidden_state) # [batch, seq, 2]
+
+        # token_logits: [batch, seq, 2] token_labels: [batch, seq]
+        self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id, reduction="none")
+        token_losses_ = self.loss_fn(token_logits.view(-1, token_logits.shape[-1]), token_labels.view(-1).long())
+        token_loss = torch.mean(token_losses_)
+        loss = lm_loss + token_loss
+        return loss,lm_loss,token_loss
+
+    def training_step(self, batch, batch_idx) -> Dict:
+        loss,lm_loss,token_loss = self._step(batch)
+        logs = {"loss": loss.item(),'lm_loss':lm_loss,'token_loss':token_loss}
+        base_loss = {"loss": loss.item(), 'lm_loss': lm_loss.item(), 'token_loss': token_loss.item()}
+        self.update_loss_names(base_loss, update_flag=self.loss_names_update_flag)
+        self.loss_names_update_flag = False
+        # metrics logged can be access by trainer.callback_metrics
+        self.log_dict(self.current_val_metrics)
+        logs["batch_size"] = batch["input_ids"].shape[0]
+        return {"loss": loss,'lm_loss':lm_loss,'token_loss':token_loss, "log": logs}
+
+    @torch.no_grad()
+    def _generative_step(self, batch: dict, fast_generate=False) -> dict:
+        tik = datetime.now()
+        if fast_generate:
+            generated_ids = self.model.generate(
+                batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                use_cache=True,
+                decoder_start_token_id=self.decoder_start_token_id,
+                num_beams=self.eval_beams,
+                max_length=self.hparams.max_target_length,
+            )
+        else:
+            generated_ids = self.model.generate(
+                    batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    use_cache=True,
+                    decoder_start_token_id=self.decoder_start_token_id,
+                    min_length=50,
+                    max_length=self.hparams.max_target_length,
+                    num_beams=self.eval_beams,
+                    top_p=self.top_p if self.use_top_p else None,
+                )
+        if self.outfile == 0:
+            outputs = self(batch['input_ids'], attention_mask=batch["attention_mask"], labels=batch['labels'],
+                           use_cache=False,
+                           output_attentions=True, output_hidden_states=True)
+            lm_loss = outputs["loss"]
+            # for classification
+            cross_attentions = outputs["cross_attentions"]
+            cross_attentions = cross_attentions[0]
+            cross_attentions = torch.sum(cross_attentions, dim=1)
+            for j, emb in enumerate(batch['input_ids']):
+                for i in range(len(emb)):
+                    if emb[i] == self.tokenizer.convert_tokens_to_ids('[TERM]'):
+                        print(j, i)
+            cross_attentions = cross_attentions.cpu().numpy()
+            np.save('attention_term.npy', cross_attentions)
+            self.outfile += 1
+
+
+        tok = datetime.now()
+        batch_gen_time = tok - tik
+        preds: List[str] = self.gen_ids_to_clean_text(generated_ids)
+        targets: List[str] = self.gen_ids_to_clean_text(batch["labels"])
+        source: List[str] = self.gen_ids_to_clean_text(batch["input_ids"])
+        loss,lm_loss,token_loss = self._step(batch)
+
+        base_metrics = {"loss": loss.item(),'lm_loss':lm_loss.item(),'token_loss':token_loss.item()}
+        rouge_metrics: Dict = nlg_eval_utils.calculate_rouge(pred_lines=preds, tgt_lines=targets)
+        base_metrics.update(**rouge_metrics)
+        bleu_metrics: Dict = nlg_eval_utils.calculate_bleu(ref_lines=[self.tokenizer.tokenize(l) for l in targets],
+                                                           gen_lines=[self.tokenizer.tokenize(l) for l in preds])
+        base_metrics.update(**bleu_metrics)
+        summ_len = np.mean(list(map(len, generated_ids)))
+
+        # update metric_names
+        self.update_metric_names(base_metrics, update_flag=self.metric_names_update_flag)
+        self.metric_names_update_flag = False
+        base_metrics.update(batch_gen_time=batch_gen_time, gen_len=summ_len,
+                            preds=preds, targets=targets,source=source)
+        return base_metrics
 

@@ -20,6 +20,7 @@ def top_p_logits(logits, p, device=None):
     """Nucleus sampling"""
     if device is None:
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    #print(logits.shape)
     batch, _ = logits.size()
     sorted_logits, _ = torch.sort(logits, descending=True, axis=-1)
     cumulative_probs = torch.cumsum(torch.nn.functional.softmax(sorted_logits, dim=-1), axis=-1)

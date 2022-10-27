@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
-from sacrebleu import corpus_bleu
 from torch import nn
 
 from transformers import EvalPrediction, PreTrainedTokenizer

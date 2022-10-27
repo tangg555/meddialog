@@ -20,14 +20,16 @@ BASE_DIR = FILE_PATH.parent.parent.parent
 sys.path.insert(0, str(BASE_DIR))  # run code in any path
 
 from src.configuration.med_dialog.config_args import parse_args_for_config
-from src.models.med_dialog import MyBart
+from src.models.med_dialog import (
+    MyBart, MyGPT2, MyT5, MyBartWithTermClassification, MyT5WithTermClassification
+)
 from src.utils.wrapper import print_done
 from src.utils.string_utils import are_same_strings
 from src.models.basic_pl_trainer import BasicPLTrainer
 from src.modules.pl_callbacks import Seq2SeqLoggingCallback, Seq2SeqCheckpointCallback
 
 
-class EventTriggerTrainer(BasicPLTrainer):
+class MedDialogTrainer(BasicPLTrainer):
     def __init__(self, args, trainer_name="event-trigger-trainer"):
         # parameters
         super().__init__(args, trainer_name=trainer_name)
@@ -53,6 +55,14 @@ class EventTriggerTrainer(BasicPLTrainer):
         # ============= bart ===============
         if are_same_strings(args.model_name, "bart"):
             self.model: MyBart = MyBart(args)
+        elif are_same_strings(args.model_name, "gpt2"):
+            self.model: MyGPT2 = MyGPT2(args)
+        elif are_same_strings(args.model_name, "t5"):
+            self.model: MyT5 = MyT5(args)
+        elif are_same_strings(args.model_name, "terms_bart"):
+            self.model: MyBartWithTermClassification = MyBartWithTermClassification(args)
+        elif are_same_strings(args.model_name, "terms_t5"):
+            self.model: MyT5WithTermClassification = MyT5WithTermClassification(args)
         else:
             raise NotImplementedError(f"args.model_name: {args.model_name}")
 
@@ -67,11 +77,7 @@ class EventTriggerTrainer(BasicPLTrainer):
             every_n_val_epochs=args.every_n_val_epochs,
             verbose=args.ckpt_verbose,
         )
-
-        # initialize pl_trainer
-        if args.gpus is not None and args.gpus > 1:
-            self.train_params["distributed_backend"] = "ddp"
-
+        print(f"train save dir: {self.save_dir}")
         self.pl_trainer: pl.Trainer = pl.Trainer.from_argparse_args(
             args,
             enable_model_summary=False,
@@ -97,5 +103,5 @@ class EventTriggerTrainer(BasicPLTrainer):
 
 if __name__ == '__main__':
     hparams = parse_args_for_config()
-    trainer = EventTriggerTrainer(hparams)
+    trainer = MedDialogTrainer(hparams)
     trainer.train()

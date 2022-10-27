@@ -202,7 +202,7 @@ class BaseTransformer(pl.LightningModule):
         raise NotImplementedError("You must implement this for your task")
 
     def train_dataloader(self):
-        return self.get_dataloader("train", "train",batch_size=self.hparams.train_batch_size, shuffle=True)
+        return self.get_dataloader("training_step", "train",batch_size=self.hparams.train_batch_size, shuffle=True)
 
     def val_dataloader(self):
         return self.get_dataloader("dev", "train",batch_size=self.hparams.eval_batch_size, shuffle=False)
@@ -214,8 +214,8 @@ class BaseTransformer(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         save_path = self.pretrained_save_path
         self.model.config.save_step = self.step_count
-        self.model.save_pretrained(save_path)
-        self.tokenizer.save_pretrained(save_path)
+        '''self.model.save_pretrained(save_path)
+        self.tokenizer.save_pretrained(save_path)'''
         print(f"hugging face format checkpoint save at {save_path}")
 
     def update_loss_names(self, loss_result: Dict, update_flag=True):

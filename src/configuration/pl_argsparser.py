@@ -43,6 +43,8 @@ def set_basic_args_for_pl_trainer(parser: argparse.ArgumentParser = None, output
     parser.set_defaults(max_epochs=10)
     # Force training for at least these many epochs
     parser.set_defaults(min_epochs=2)
+    # limit val batches with doing evaluation
+    parser.set_defaults(limit_val_batches=2)
     # no accumulation for epochs 1-4. accumulate 3 for epochs 5-10. accumulate 20 after that
     parser.set_defaults(accumulate_grad_batches=1)
     # Automatically tries to find the largest batch size that fits into memory, before any training.
@@ -51,7 +53,7 @@ def set_basic_args_for_pl_trainer(parser: argparse.ArgumentParser = None, output
     # default used by the Trainer (no learning rate finder)
     parser.set_defaults(auto_lr_find=False)
     # How often within one training epoch to check the validation set. Can specify as float or int.
-    parser.set_defaults(val_check_interval=0.5)
+    parser.set_defaults(val_check_interval=0.01)
     # Default path for logs and weights when no logger or pytorch_lightning.callbacks.ModelCheckpoint callback passed.
     parser.set_defaults(default_root_dir=output_dir)
     # default used by Trainer, saves the most recent model to a single checkpoint after each epoch
@@ -102,5 +104,10 @@ def process_parsed_args_for_pl_trainer(args: argparse.Namespace):
     # precision
     if args.accelerator == "cpu" and args.precision == 16:
         args.precision = "bf16"
+    else: # gpu
+        n_gpus = torch.cuda.device_count()
+        if n_gpus > 1:  # multiple gpus
+            args.accelerator = "gpu"
+            args.strategy = "ddp"
 
 
