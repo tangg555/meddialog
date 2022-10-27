@@ -8,5 +8,6 @@ __pycache__
 toy.py
 output
 resources
-datasets
 external-resources
+datasets
+python_commands.sh
