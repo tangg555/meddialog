@@ -1,22 +1,51 @@
 # Terminology-aware Medical Dialogue Generation
-Code and dataset for paper _Terminology-aware Medical Dialogue Generation_
+This repository is the code and resources for the paper [Terminology-aware Medical Dialogue Generation](https://arxiv.org/pdf/2210.15551.pdf) 
 
-## Dataset
-The dataset and its corresponding citation relationship can be downloaded through this link.
+## Instructions
+
+This project is implemented with **Pytorch**.
+
+This project is based on [pytorch-lightning](https://www.pytorchlightning.ai/) framework, and all pretrained models can be downloadeded from [Hugginface](https://huggingface.co).
+
+So if you want to run this code, you must have following preliminaries:
+- Python 3 or Anaconda (mine is 3.8)
+- [Pytorch](https://pytorch.org/) 
+- transformers (a package for [huggingface](https://huggingface.co/facebook/bart-base))
+- [pytorch-lightning (a package)](https://www.pytorchlightning.ai/)
+
+## Datasets and Resources
+
+### Directly Download Dataset and Resources
+To reproduce our work you need to download following files:
+
+- Processed data (put them to `datasets/med-dialog` directory) [med-dialog](https://www.dropbox.com/s/roewcfiw2u08g5w/med-dialog.zip?dl=0)
+
+- Medicial Terminology List (put it to `resources/med-dialog` directory) [med_term_list.txt](https://www.dropbox.com/s/cpl5mbw2sy73dcn/med_term_list.txt?dl=0)
+
+### Preprocess Dataset From Scratch
+
+The raw dialogue corpus is downloaded from the work of [Medical-Dialogue-System](https://github.com/UCSD-AI4H/Medical-Dialogue-System), 
+or you can download it from [here](https://www.dropbox.com/s/bmuoxzi587pz4v3/large-english-dialog-corpus.zip?dl=0).
+
+Put it to `resources/med-dialog` directory.
+
+### Put Files To Correct Destinations 
+
+Unzip these files, and your `datasets` and `resources` should be as follows.
 
 The structure of `datasets`should be like this:
 ```markdown
-├── datasets
+├── datasets/med-dialog
    └── dialog-with-term		# dialogs with term tags
-          └── `train.source.txt`    # leading context of dialog
-          └── `train.target.txt`       # responses to the leading context
+          └── `train.source.txt`    
+          └── `train.target.txt`       
           └── `val.source.txt` 
           └── `val.target.txt` 
           └── `test.source.txt` 
           └── `test.target.txt` 
-    └── dialog-with-term		# raw dialog datasets
-          └── `train.source.txt`    # leading context of dialog
-          └── `train.target.txt`       # responses to the leading context
+    └── large-english-dialog-corpus		# dialog datasets without terms
+          └── `train.source.txt`    # input: dialogue history
+          └── `train.target.txt`    # reference output: response from the doctor 
           └── `val.source.txt` 
           └── `val.target.txt` 
           └── `test.source.txt` 
@@ -32,63 +61,62 @@ the example of `test.target.txt` (story):
 
 `bppv is due to [TERM] ear problem, [TERM] and there is n [TERM] relation to sjogren's. it [TERM] can be treated by a good [TERM] ent specialist.`
 
+The structure of `datasets` should be like this:
+```markdown
+├── resources/med-dialog
+   └── large-english-dialog-corpus		# the raw dialogue corpus
+          └── `train.source.txt`    
+          └── `train.target.txt`       
+          └── `val.source.txt` 
+          └── `val.target.txt` 
+          └── `test.source.txt` 
+          └── `test.target.txt` 
+    └── med_term_list.txt		# the terminology list
+```
 
-## Instructions
-This project is based on [pytorch-lightning](https://www.pytorchlightning.ai/) framework, and all pretrained models can be downloadeded from [Hugginface](https://huggingface.co).
-
-So if you want to run this code, you must have following preliminaries:
-- Python 3 or Anaconda (mine is 3.8)
-- [Pytorch](https://pytorch.org/) 
-- transformers (a package for [huggingface](https://huggingface.co/facebook/bart-base))
-- [pytorch-lightning (a package)](https://www.pytorchlightning.ai/)
+The terminology list is acquired from the word of [wordlist-medicalterms-en](https://github.com/glutanimate/wordlist-medicalterms-en/blob/master/wordlist.txt)
 
 ## Quick Start
 
-#### 1. Install packages
+### 1. Install packages
 ```shell
 python -r requirements.txt
 ```
-#### 2. Preprocess data
-Before finetuning, you need to preprocess dataset. You can run
+### 2. Collect Datasets and Resources
+
+As mentioned above.
+
+### 3. Run the code for training or testing
+
+Train bart -w terms AL:
+
 ```shell
-python tasks/med-dialog/preprocess_for_corpus.py
-python tasks/med-dialog/enhance_dataset.py
-```
-
-#### 3. Fine-tuning BART on Our datasets
-I have set all essential parameters, so you can directly run 
-
-`python ./tasks/med-dialog/train.py`
-
-**Or** 
-
-If you want to modify parameters, you can run
-```shell
-python tasks/med-dialog/train.py --model_name terms_bart --experiment_name=term_bart-large2-meddialog\
- --learning_rate=2e-5 --train_batch_size=6 --eval_batch_size=6 --model_name_or_path=facebook/bart-large \
+python tasks/med-dialog/train.py --model_name terms_bart --experiment_name=term_bart-base-meddialog\
+ --learning_rate=2e-5 --train_batch_size=6 --eval_batch_size=6 --model_name_or_path=facebook/bart-base \
  --val_check_interval=0.5 --max_epochs=6 --accum_batches_args=12  --num_sanity_val_steps=1 \
  --save_top_k 3 --eval_beams 2 --data_dir=datasets/med-dialog/dialog-with-term \
  --limit_val_batches=20
 ```
 
-#### 4. Generating Responses and Evaluation
-Same to training. Directly run 
-
-`python ./tasks/med-dialog/test.py`
-
-**Or** 
+Test bart -w terms AL:
 
 ```shell
 python tasks/med-dialog/test.py\
-  --eval_batch_size=32 --model_name_or_path=facebook/bart-large \
+  --eval_batch_size=32 --model_name_or_path=facebook/bart-base \
   --output_dir=output/med-dialog/ --model_name terms_bart --experiment_name=term_bart-base-meddialog --eval_beams 2 \
   --max_target_length=400
 ```
 
+If you also want to try baselines, please read the code of
+`tasks/med-dialog/train.py` and `tasks/med-dialog/test.py`. I believe you will understand what to do.
+
+
 ## Notation
 Some notes for this project.
-#### 1 - Complete Prject Structure
+#### 1 - Complete Project Structure
 ```markdown
+├── src # source code
+├── tasks # code for running programs
 ├── datasets 
 ├── output  # this will be automatically created to put all the output stuff including checkpoints and generated text
 ├── resources # put some resources used by the model e.g. the pretrained model.

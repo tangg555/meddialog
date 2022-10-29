@@ -34,11 +34,6 @@ python tasks/med-dialog/enhance_dataset.py
 # --save_top_k 3 --eval_beams 2 --data_dir=datasets/med-dialog/dialog-with-term \
 # --limit_val_batches=20
 
-#python tasks/med-dialog/train.py --model_name terms_t5 --experiment_name=term_t5-base-meddialog\
-# --learning_rate=1e-4 --train_batch_size=6 --eval_batch_size=6 --model_name_or_path=t5-base \
-# --val_check_interval=1.0 --max_epochs=5 --accum_batches_args=12  --num_sanity_val_steps=1 \
-# --save_top_k 3 --eval_beams 2 --data_dir=datasets/med-dialog/dialog-with-term \
-# --limit_val_batches=20
 ###
 ## =============================== test ====================
 ##without terms
