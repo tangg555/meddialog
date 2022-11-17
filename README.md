@@ -80,7 +80,7 @@ The terminology list is acquired from the word of [wordlist-medicalterms-en](htt
 
 ### 1. Install packages
 ```shell
-python -r requirements.txt
+pip install -r requirements.txt
 ```
 ### 2. Collect Datasets and Resources
 
