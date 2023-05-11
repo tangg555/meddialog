@@ -195,7 +195,7 @@ class BaseTransformer(pl.LightningModule):
 
     def setup(self, stage: Optional[str] = None):
         # stage: train, test, eval
-        self.dataset_size = len(self.test_dataloader().dataset)
+        self.dataset_size = len(self.train_dataloader().dataset)
 
 
     def get_dataloader(self, src_file_prefix: str, tgt_file_prefix: str, batch_size: int, shuffle: bool = False):
