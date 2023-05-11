@@ -129,8 +129,7 @@ I wrote two scripts to download models from huggingface website.
 One is `tasks/download_hf_models.sh`, and another is `src/utils/huggingface_helper.py`
 
 ## Citation
-If you found this repository or paper is helpful to you, please cite our paper. 
-Currently we only have arxiv citation listed as follows:
+If you found this repository or paper is helpful to you, please cite our paper.
 
 This is the arxiv citation:
 ```angular2
@@ -146,4 +145,14 @@ This is the arxiv citation:
 }
 ```
 
-
+This is the ICASSP citation from google scholar:
+```angular2
+@inproceedings{tang2023terminology,
+  title={Terminology-Aware Medical Dialogue Generation},
+  author={Tang, Chen and Zhang, Hongbo and Loakman, Tyler and Lin, Chenghua and Guerin, Frank},
+  booktitle={ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  pages={1--5},
+  year={2023},
+  organization={IEEE}
+}
+```
